@@ -1,0 +1,5 @@
+README
+MANIFEST
+Makefile.PL
+Pretty.pm
+Pretty/Table.pm
