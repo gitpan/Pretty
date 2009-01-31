@@ -1,17 +1,20 @@
 #
-# $Id: Pretty::Table.pm v0.2, 2008-5-7 7:50 $
+# $Id: Pretty::Table.pm v0.3, 2009-01-31 09:50 $
+#
+# This is free software.
+#
+# Changes log:
+#   (1)2008-05-07 v0.2
+#   (2)2009-01-31 v0.3
+#       fix some bugs;
+#       remove 'insert' method, replaced by 'add' method;
+#
+# Thanks:
+#   mbailey@cpan.org
+#   maciej.pijanka@gmail.com
 #
 
 package Pretty::Table;
-
-#
-# Copyright (c) 2008 Shan LeiGuang.
-#
-# This package is free software and is provided "as is" without express 
-# or implied warranty.  It may be used, redistributed and/or modified 
-# under the terms of the Perl Artistic License (see
-# http://www.perl.com/perl/misc/Artistic.html)
-#
 
 use strict;
 use vars qw($AUTOLOAD);
@@ -32,10 +35,10 @@ BEGIN {
         _deco_horizontal => ['|', 'read/write'],
         _deco_vertical   => ['-', 'read/write'],
         _deco_cross      => ['+', 'read/write'],
-        _empty_fill      => [' ', 'read/write'],
+        _empty_fill      => [' ', 'read'],
         _if_multi_lines  => [1, 'read/write'],
         _max_col_length  => [40, 'read/write'],
-        _skip_deco_rows  => [undef, 'read'],
+        _skip_deco_rows  => [undef, 'read/write'],
     );
     sub _standard_keys { keys %_attrs; }    
     sub _accessible {
@@ -50,7 +53,7 @@ BEGIN {
     my $_count = 0;
     sub get_count { $_count; }
     sub _incr_count { ++$_count; }
-    sub _desr_count { --$_count; }
+    sub _decr_count { --$_count; }
 }
 
 sub new {
@@ -73,7 +76,7 @@ sub new {
     return $self;
 }
 
-sub DESTROY { $_[0]->_desc_count(); }
+sub DESTROY { $_[0]->_decr_count(); }
 
 #'set' and 'get' methods
 sub AUTOLOAD {
@@ -84,7 +87,7 @@ sub AUTOLOAD {
         *{$AUTOLOAD} = sub { return $_[0]->{$attr}; };
         return $self->{$attr};
     }
-    if($AUTOLOAD =~ m/.*::set(_\w+)/ && $self->_accessible($1, 'read')) {
+    if($AUTOLOAD =~ m/.*::set(_\w+)/ && $self->_accessible($1, 'write')) {
         my $attr = $1;
         *{$AUTOLOAD} = sub { $_[0]->{$attr} = $_[1]; return; };
         $self->{$1} = $newval;
@@ -118,7 +121,7 @@ sub output {
             $dr->[$i] =~ s/^\s+//;
             $dr->[$i] =~ s/\s+$//;
             $dr->[$i] =~ s/\n//g;
-            $dr->[$i] =~ s/s{2,}/ /g;
+            $dr->[$i] =~ s/\s{2,}/ /g;
         }
     }
     #make each arry of @$data_ref the same size
@@ -165,7 +168,7 @@ sub output {
                 my @array_added;
                 foreach my $col (@{$rows[$i]}) {
                     my $sub = substr $col, $j*$max_col_length, $max_col_length;
-                    if($sub) {
+                    if(defined $sub) {
                         push @array_added, $sub;
                     } else {
                         push @array_added, ' ';
@@ -200,10 +203,10 @@ sub output {
         if($total_length < (length($title) + $margin_left + $margin_right)) {
             $total_length = length($title) + $margin_left + $margin_right;
         }
-        #  +----------------------+
-        #  | Pretty::Table        |
-        #  +----------------------+
-        $ptable = ($space x $indent).$deco_c.($deco_v x $total_length).$deco_c."\n";
+        #     +-----------------------+
+        #     | Pretty::Table         |
+        #     +-----------------------+
+        $ptable  = ($space x $indent).$deco_c.($deco_v x $total_length).$deco_c."\n";
         $ptable .= ($space x $indent).$deco_h;
         $ptable .= $self->data_format($total_length, $title);
         $ptable .= $deco_h."\n";
@@ -268,43 +271,35 @@ sub data_format {
     return $data_formated;
 }
 
-sub insert {
-    my ($self, $dref_insert, $index) = @_;
+sub add {
+    my ($self, $dref_add) = @_;
     my $data_ref = $self->get_data_ref();
-    if(not $index) {
-        push @$data_ref, $dref_insert;
-    } else {
-        foreach ((@$data_ref - 1)..$index) {
-            $data_ref->[$_] = $data_ref->[$_-1];
-        }
-        $data_ref->[$index] = $dref_insert;
-    }
+    push @$data_ref, $dref_add;
 }
 
-#'sort_by' method, only supported on 'row' type
+#'sort_by' table header field, the first row/col is table header
 sub sort_by {
     my ($self, $hdrkey, $order) = @_;
     my $data_type = $self->get_data_type();
     my $data_ref  = $self->get_data_ref();
     $order = 'A' if(not $order);
-    if($data_type eq 'row') {
-        my $hdrref = $data_ref->[0];
-        my $hdrkey_index;
-        foreach (0..(@$hdrref - 1)) {
-            if($hdrref->[$_] =~ m/^$hdrkey$/i) {
-                $hdrkey_index = $_;
-                last;
-            }
+    my $hdrref = $data_ref->[0]; #the first row/col is table header
+    my $hdrkey_index;
+    foreach (0..(@$hdrref - 1)) {
+        if($hdrref->[$_] =~ m/^$hdrkey$/i) {
+            $hdrkey_index = $_;
+            last;
         }
-        shift(@{$data_ref});
-        if($order eq 'A') {
-            $data_ref = [ sort{$a->[$hdrkey_index] cmp $b->[$hdrkey_index]} @$data_ref ];
-        } elsif($order eq 'D') {
-            $data_ref = [ sort{$b->[$hdrkey_index] cmp $a->[$hdrkey_index]} @$data_ref ];
-        }
-        unshift(@{$data_ref}, $hdrref);
-        $self->set_data_ref($data_ref);
     }
+    return if(not defined $hdrkey_index); #return if not found '$hdrkey' in headers
+    shift(@{$data_ref}); #not sort the header
+    if($order eq 'A') {
+        $data_ref = [ sort{$a->[$hdrkey_index] cmp $b->[$hdrkey_index]} @$data_ref ];
+    } elsif($order eq 'D') {
+        $data_ref = [ sort{$b->[$hdrkey_index] cmp $a->[$hdrkey_index]} @$data_ref ];
+    }
+    unshift(@{$data_ref}, $hdrref);
+    $self->set_data_ref($data_ref);
 }
 
 1;
@@ -321,63 +316,84 @@ C<Pretty::Table> - to print pretty text table
 
     my $pt = Pretty::Table->new(
         data_type      => 'row',     #row mode
-        data_format    => 'ucfirst', #uppercase the first char
+        data_format    => 'ucfirst', #upper char
         if_multi_lines => 1,         #enable multi-lines mode
-        max_col_length => 10,        #set max_col_length to 10
+        max_col_length => 15,        #set max_col_length to 15
     );
 
     my $dr = [
-        ['id','name','sex','age','email'], #this is a row
+        ['id','name','sex','age','email'],
         ['01','tommy','male',27],
         ['02','jarry','male',26],
-        ['03','shanleiguang',26,'shanleiguang@gmail.com'],
+        ['03','shanleiguang','male',28,'shanleiguang@gmail.com'],
     ];
 
     $pt->set_data_ref($dr);
-    $pt->set_title('Contacts');
     $pt->set_align('left');
     $pt->set_data_format('normal');
-    $pt->insert(['04','marry','female',26], 4);
+    $pt->add(['05','jackie','male',27,'jakie@somedoain.com']);
+    $pt->add(['04','marry','female',26]);
+    $pt->sort_by('id');
+    $pt->set_title("Contacts(sorted by 'id')");
+    print $pt->output();
     $pt->sort_by('name');
+    $pt->set_title("Contacts(sorted by 'name')");
     print $pt->output();
 
-    $pt->set_data_type('col'); #change to 'col' mode
+    $pt->set_data_type('col');
     $pt->set_deco_cross('*');
     $pt->set_if_has_title(0);
+    $pt->sort_by('id');
     print $pt->output();
 
 =head1 Example Output
 
-  +---------------------------------------------+
-  | Contacts                                    |
-  +----+------------+--------+-----+------------+
-  | id | name       | sex    | age | email      |
-  +----+------------+--------+-----+------------+
-  | 01 | tommy      | male   | 27  |            |
-  +----+------------+--------+-----+------------+
-  | 02 | jarry      | male   | 26  |            |
-  +----+------------+--------+-----+------------+
-  | 03 | shanleigua | male   | 26  | shanleigua |
-  |    | ng         |        |     | ng@gmail.c |
-  |    |            |        |     | om         |
-  +----+------------+--------+-----+------------+
-  | 04 | marry      | female | 26  |            |
-  +----+------------+--------+-----+------------+
-
-  *-------*-------*-------*------------*--------*
-  | id    | 01    | 02    | 03         | 04     |
-  *-------*-------*-------*------------*--------*
-  | name  | tommy | jarry | shanleigua | marry  |
-  |       |       |       | ng         |        |
-  *-------*-------*-------*------------*--------*
-  | sex   | male  | male  | male       | female |
-  *-------*-------*-------*------------*--------*
-  | age   | 27    | 26    | 26         | 26     |
-  *-------*-------*-------*------------*--------*
-  | email |       |       | shanleigua |        |
-  |       |       |       | ng@gmail.c |        |
-  |       |       |       | om         |        |
-  *-------*-------*-------*------------*--------*
+  +----------------------------------------------------+
+  | Contacts(sorted by 'id')                           |
+  +----+--------------+--------+-----+-----------------+
+  | id | name         | sex    | age | email           |
+  +----+--------------+--------+-----+-----------------+
+  | 01 | tommy        | male   | 27  |                 |
+  +----+--------------+--------+-----+-----------------+
+  | 02 | jarry        | male   | 26  |                 |
+  +----+--------------+--------+-----+-----------------+
+  | 03 | shanleiguang | male   | 0   | shanleiguang@gm |
+  |    |              |        |     | ail.com         |
+  +----+--------------+--------+-----+-----------------+
+  | 04 | marry        | female | 26  |                 |
+  +----+--------------+--------+-----+-----------------+
+  | 05 | jackie       | male   | 27  | jakie@somedoain |
+  |    |              |        |     | .com            |
+  +----+--------------+--------+-----+-----------------+
+  +----------------------------------------------------+
+  | Contacts(sorted by 'name')                         |
+  +----+--------------+--------+-----+-----------------+
+  | id | name         | sex    | age | email           |
+  +----+--------------+--------+-----+-----------------+
+  | 05 | jackie       | male   | 27  | jakie@somedoain |
+  |    |              |        |     | .com            |
+  +----+--------------+--------+-----+-----------------+
+  | 02 | jarry        | male   | 26  |                 |
+  +----+--------------+--------+-----+-----------------+
+  | 04 | marry        | female | 26  |                 |
+  +----+--------------+--------+-----+-----------------+
+  | 03 | shanleiguang | male   | 0   | shanleiguang@gm |
+  |    |              |        |     | ail.com         |
+  +----+--------------+--------+-----+-----------------+
+  | 01 | tommy        | male   | 27  |                 |
+  +----+--------------+--------+-----+-----------------+
+  *-------*-------*-------*-----------------*--------*-----------------*
+  | id    | 01    | 02    | 03              | 04     | 05              |
+  *-------*-------*-------*-----------------*--------*-----------------*
+  | name  | tommy | jarry | shanleiguang    | marry  | jackie          |
+  *-------*-------*-------*-----------------*--------*-----------------*
+  | sex   | male  | male  | male            | female | male            |
+  *-------*-------*-------*-----------------*--------*-----------------*
+  | age   | 27    | 26    | 0               | 26     | 27              |
+  *-------*-------*-------*-----------------*--------*-----------------*
+  | email |       |       | shanleiguang@gm |        | jakie@somedoain |
+  |       |       |       | ail.com         |        | .com            |
+  *-------*-------*-------*-----------------*--------*-----------------*
 
 =head2 Methods
 
@@ -453,15 +469,14 @@ C<Pretty::Table> - to print pretty text table
 
     default is 40, 'if_multi_lines' must enabled
 
-=item C<Pretty::Table-E<gt>insert(<[...]> [,$position])
+=item C<Pretty::Table-E<gt>add(<[...]>)
 
-    $pt->insert(['04','john','male','25']);    #insert to the end of $data_ref
-    $pt->insert(['03','john','male','25'], 3); #insert to the '3' position
+    $pt->add(['04','john','male','25']); #add to the end of $data_ref
 
-=item C<Pretty::Table-E<gt>sort_by(<$hdrkey>)
+=item C<Pretty::Table-E<gt>sort_by(<$hdrkey>,['A|D'])
 
     my $dr = [
-        ['id','name','sex','age'],  #be a 'row' or a 'col'
+        ['id','name','sex','age'],
         [...],
     ];
     $pt->set_data_ref($dr);

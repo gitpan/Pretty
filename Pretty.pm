@@ -1,19 +1,10 @@
 #
-# Pretty.pm - Base class for Pretty::* object hierarchy.
+# $Id: Pretty.pm v0.3, 2009/01/31 21:00 $
 #
-# $Id: Pretty.pm v0.2, 2008/05/05 14:00 $
+# This is free software.
 #
 
 package Pretty;
-
-#
-# Copyright (c) 2008 Shan LeiGuang.
-#
-# This package is free software and is provided "as is" without express 
-# or implied warranty.  It may be used, redistributed and/or modified 
-# under the terms of the Perl Artistic License (see
-# http://www.perl.com/perl/misc/Artistic.html)
-#
 
 use strict;
 use vars qw($VERSION);
@@ -22,7 +13,7 @@ my $class;
 
 BEGIN {
     $class = __PACKAGE__;
-    $VERSION = "0.2";
+    $VERSION = "0.3";
 }
 
 sub VERSION () { "$class v$VERSION" }
